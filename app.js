@@ -71,7 +71,7 @@ const D = {
 };
 
 // ── State ────────────────────────────────────────────────────
-const state = { view: 'overview' };
+const state = { view: 'overview', modelGrowth: 6.5, modelMult: 9.5 };
 
 // ── Navigation ───────────────────────────────────────────────
 document.querySelectorAll('.nav-btn').forEach(btn => {
@@ -95,6 +95,7 @@ function render() {
     case 'returns':     renderReturns();     break;
     case 'debt':        renderDebt();        break;
     case 'sensitivity': renderSensitivity(); break;
+    case 'model':       renderModel();       break;
   }
 }
 
@@ -465,6 +466,188 @@ function irrClass(irr) {
   if (irr >= 15) return 'irr-mid';
   if (irr >= 10) return 'irr-low';
   return 'irr-poor';
+}
+
+// ── Model (live calculator) ──────────────────────────────────
+function calcReturns(growthPct, exitMult) {
+  const LTM  = D.entry.ltm_ebitda;
+  const EQ   = D.entry.pe_equity;
+  const SR_R = 0.0875;
+  const MZ_R = 0.125;
+  const TAX  = 0.25;
+  const CAP  = 0.09;
+  const g    = growthPct / 100;
+  let sr = D.entry.senior;
+  let mz = D.entry.mezz;
+
+  for (let y = 1; y <= 5; y++) {
+    const ebitda   = LTM * Math.pow(1 + g, y);
+    const interest = sr * SR_R + mz * MZ_R;
+    const ebt      = ebitda - interest;
+    const tax      = Math.max(0, ebt * TAX);
+    const fcf      = ebitda - interest - tax - ebitda * CAP;
+    if (fcf > 0) {
+      const srPay = Math.min(sr, fcf);
+      sr -= srPay;
+      mz -= Math.min(mz, Math.max(0, fcf - srPay));
+    }
+  }
+
+  const exitEbitda = LTM * Math.pow(1 + g, 5);
+  const exitEV     = exitEbitda * exitMult;
+  const exitDebt   = Math.max(0, sr + mz);
+  const exitEq     = Math.max(0, exitEV - exitDebt);
+  const moic       = exitEq / EQ;
+  const irr        = Math.pow(Math.max(moic, 0.001), 0.2) - 1;
+  const ebitdaGain = (exitEbitda - LTM) * exitMult;
+  const multGain   = LTM * (exitMult - D.entry.entry_mult);
+  const debtPd     = D.entry.total_debt - exitDebt;
+  return { exitEbitda, exitEV, exitDebt, exitEq, moic, irr, ebitdaGain, multGain, debtPd };
+}
+
+function irrColor(irr) {
+  if (irr >= 0.25) return 'var(--green)';
+  if (irr >= 0.20) return 'var(--gold)';
+  if (irr >= 0.15) return 'var(--blue)';
+  return 'var(--red)';
+}
+
+function modelResultHTML(r) {
+  const col = irrColor(r.irr);
+  return `
+    <div class="card-title">Live Returns</div>
+    <div class="model-irr-row">
+      <div class="model-irr-block">
+        <div class="model-irr-num" style="color:${col}">${(r.irr * 100).toFixed(1)}%</div>
+        <div class="model-irr-lab">IRR</div>
+      </div>
+      <div class="model-irr-block">
+        <div class="model-irr-num" style="color:${col}">${r.moic.toFixed(2)}x</div>
+        <div class="model-irr-lab">MOIC</div>
+      </div>
+    </div>
+    <div class="divider"></div>
+    <div class="lv-row">
+      <span class="lv-label">Exit EBITDA</span>
+      <span class="lv-value">${fmt(r.exitEbitda)}</span>
+    </div>
+    <div class="lv-row">
+      <span class="lv-label">Exit EV</span>
+      <span class="lv-value">${fmt(r.exitEV)}</span>
+    </div>
+    <div class="lv-row">
+      <span class="lv-label">Remaining Debt</span>
+      <span class="lv-value" style="color:var(--red)">${fmt(r.exitDebt)}</span>
+    </div>
+    <div class="lv-row">
+      <span class="lv-label">Exit Equity</span>
+      <span class="lv-value gold">${fmt(r.exitEq)}</span>
+    </div>`;
+}
+
+function modelDecompHTML(r) {
+  const totalGain = r.exitEq - D.entry.pe_equity;
+  if (totalGain <= 0) {
+    return `<div style="color:var(--red);text-align:center;padding:12px;font-size:13px">
+      Loss scenario — equity wiped below entry cost</div>`;
+  }
+  const maxBar = Math.max(r.ebitdaGain, r.multGain, r.debtPd, 1);
+  return [
+    ['EBITDA Growth',      r.ebitdaGain, 'var(--blue)'],
+    ['Multiple Expansion', r.multGain,   'var(--gold)'],
+    ['Debt Paydown',       r.debtPd,     'var(--green)'],
+  ].map(([label, val, color]) => {
+    const pct = Math.max(0, Math.round((val / maxBar) * 100));
+    return `
+      <div class="wf-row">
+        <div class="wf-label">${label}</div>
+        <div class="wf-bar-wrap">
+          <div class="wf-bar" style="width:${pct}%;background:${color}"></div>
+        </div>
+        <div class="wf-value" style="color:${color}">${val >= 0 ? '+' : ''}${fmt(val)}</div>
+      </div>`;
+  }).join('') + `
+    <div style="margin-top:8px;font-size:11px;color:var(--text-dim);text-align:right">
+      Total gain: <strong style="color:var(--text)">${fmt(totalGain)}</strong>
+      (${Math.round(totalGain / D.entry.pe_equity * 100)}% on entry)
+    </div>`;
+}
+
+function renderModel() {
+  const g = state.modelGrowth;
+  const m = state.modelMult;
+  const r = calcReturns(g, m);
+
+  c.innerHTML = `
+    <div class="card card-gold">
+      <div class="card-title">Assumptions</div>
+      <div class="model-slider-wrap">
+        <div class="model-slider-head">
+          <span class="model-slider-label">EBITDA Growth (Annual)</span>
+          <span class="model-slider-val" id="growth-val">${g.toFixed(1)}%</span>
+        </div>
+        <input type="range" class="model-slider" id="growth-slider"
+               min="0" max="20" step="0.5" value="${g}">
+        <div class="model-slider-ticks">
+          <span>0%</span><span>5%</span><span>10%</span><span>15%</span><span>20%</span>
+        </div>
+      </div>
+      <div class="model-slider-wrap">
+        <div class="model-slider-head">
+          <span class="model-slider-label">Exit EV/EBITDA Multiple</span>
+          <span class="model-slider-val" id="mult-val">${m.toFixed(1)}x</span>
+        </div>
+        <input type="range" class="model-slider" id="mult-slider"
+               min="6" max="14" step="0.5" value="${m}">
+        <div class="model-slider-ticks">
+          <span>6x</span><span>8x</span><span>10x</span><span>12x</span><span>14x</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" id="model-result">${modelResultHTML(r)}</div>
+
+    <div class="card">
+      <div class="card-title">Return Decomposition</div>
+      <div id="model-decomp">${modelDecompHTML(r)}</div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Benchmarks</div>
+      <div class="lv-row">
+        <span class="lv-label">Base Case</span>
+        <span class="lv-value" style="color:var(--blue)">18.6% IRR / 2.35x MOIC</span>
+      </div>
+      <div class="lv-row">
+        <span class="lv-label">Management Case</span>
+        <span class="lv-value" style="color:var(--gold)">28.2% IRR / 3.46x MOIC</span>
+      </div>
+      <div class="lv-row">
+        <span class="lv-label">PE Hurdle Rate</span>
+        <span class="lv-value">20% IRR (typical)</span>
+      </div>
+      <div class="lv-row">
+        <span class="lv-label">Entry Equity</span>
+        <span class="lv-value">${fmt(D.entry.pe_equity)}</span>
+      </div>
+    </div>
+  `;
+
+  document.getElementById('growth-slider').addEventListener('input', e => {
+    state.modelGrowth = parseFloat(e.target.value);
+    document.getElementById('growth-val').textContent = state.modelGrowth.toFixed(1) + '%';
+    const res = calcReturns(state.modelGrowth, state.modelMult);
+    document.getElementById('model-result').innerHTML = modelResultHTML(res);
+    document.getElementById('model-decomp').innerHTML = modelDecompHTML(res);
+  });
+
+  document.getElementById('mult-slider').addEventListener('input', e => {
+    state.modelMult = parseFloat(e.target.value);
+    document.getElementById('mult-val').textContent = state.modelMult.toFixed(1) + 'x';
+    const res = calcReturns(state.modelGrowth, state.modelMult);
+    document.getElementById('model-result').innerHTML = modelResultHTML(res);
+    document.getElementById('model-decomp').innerHTML = modelDecompHTML(res);
+  });
 }
 
 // ── Init ─────────────────────────────────────────────────────

@@ -1,4 +1,4 @@
-const CACHE = 'lbo-model-v1';
+const CACHE = 'lbo-model-v2';
 const BASE = self.location.pathname.replace('sw.js', '');
 
 const ASSETS = [

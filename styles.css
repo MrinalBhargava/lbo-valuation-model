@@ -208,6 +208,41 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
                     font-size: 10px; color: var(--text-muted); }
 .sens-legend-swatch { width: 12px; height: 12px; border-radius: 2px; }
 
+/* ── Model / live calculator ───────────────────────────────── */
+.model-slider-wrap { margin-bottom: 14px; }
+.model-slider-wrap:last-child { margin-bottom: 0; }
+.model-slider-head { display: flex; justify-content: space-between;
+                     align-items: center; margin-bottom: 8px; }
+.model-slider-label { font-size: 11px; color: var(--text-muted); font-weight: 600;
+                      text-transform: uppercase; letter-spacing: 0.05em; }
+.model-slider-val   { font-size: 20px; font-weight: 800; color: var(--gold);
+                      letter-spacing: -0.5px; }
+.model-slider {
+  width: 100%; height: 6px;
+  -webkit-appearance: none; appearance: none;
+  background: var(--surface-2); border-radius: 3px;
+  outline: none; cursor: pointer;
+}
+.model-slider::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none;
+  width: 26px; height: 26px; border-radius: 50%;
+  background: var(--gold); cursor: pointer;
+  box-shadow: 0 0 0 4px rgba(212,160,23,.2);
+  transition: box-shadow .15s;
+}
+.model-slider:active::-webkit-slider-thumb {
+  box-shadow: 0 0 0 8px rgba(212,160,23,.25);
+}
+.model-slider-ticks { display: flex; justify-content: space-between;
+                      font-size: 10px; color: var(--text-dim); margin-top: 5px; }
+.model-irr-row   { display: flex; gap: 10px; margin-bottom: 12px; }
+.model-irr-block { flex: 1; background: var(--surface-2); border-radius: var(--radius-sm);
+                   padding: 16px 12px; text-align: center; }
+.model-irr-num   { font-size: 36px; font-weight: 900; letter-spacing: -1px;
+                   transition: color .15s; }
+.model-irr-lab   { font-size: 10px; color: var(--text-muted); margin-top: 3px;
+                   text-transform: uppercase; letter-spacing: 0.06em; }
+
 /* ── Toast ─────────────────────────────────────────────────── */
 #toast { position: fixed; bottom: calc(24px + env(safe-area-inset-bottom));
          left: 50%; transform: translateX(-50%) translateY(20px);
